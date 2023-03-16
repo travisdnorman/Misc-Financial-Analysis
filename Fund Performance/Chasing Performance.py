@@ -6,7 +6,7 @@ import pandas as pd
 import math
 
 load_data = True
-historical_review_period = 3 #years
+historical_review_period = 5 #years
 #frequency at which we try different sortings
 reselection_period = 12 #months
 #how many years into the future do we track the returns of the deciles
@@ -113,6 +113,6 @@ for idx_selection, selection_date in enumerate(selection_dates):
     deciles_post_selection_returns.index.names = ['Decile']
     decile_returns.append(deciles_post_selection_returns)
      
-average_deciles_post_selection_returns = pd.concat(decile_returns, keys = selection_dates, axis=0)
+all_deciles_post_selection_returns = pd.concat(decile_returns, keys = selection_dates, axis=0)
         
-average_deciles_post_selection_returns.transpose().plot()
+all_deciles_post_selection_returns.groupby('Decile').mean().transpose().plot()
