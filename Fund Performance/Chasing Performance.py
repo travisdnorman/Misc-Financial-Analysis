@@ -5,7 +5,6 @@
 import pandas as pd
 import math
 
-load_data = True
 historical_review_period = 5 #years
 #frequency at which we try different sortings
 reselection_period = 12 #months
@@ -22,19 +21,19 @@ Funds = Funds[Funds['fund_category'].notna()]
 Funds['inception_date'] = pd.to_datetime(Funds['inception_date']).dt.date
 
 Selected_Funds = Funds[Funds['fund_category'].str.contains('Growth')]
+Selected_Funds.set_index('fund_symbol', inplace=True)
 selected_funds_categories = Selected_Funds['fund_category'].value_counts()
 selected_funds_categories = selected_funds_categories[selected_funds_categories >= 30]
 
 Selected_Funds = Selected_Funds[Selected_Funds['fund_category'].isin(selected_funds_categories.index.tolist())]
 
-if load_data:
-    #read data and convert price_date column to datetime data type
-    data = pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - A-E.csv')
-    data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - F-K.csv')])
-    data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - L-P.csv')])
-    data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - Q-Z.csv')])
+#read data and convert price_date column to datetime data type
+data = pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - A-E.csv')
+data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - F-K.csv')])
+data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - L-P.csv')])
+data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - Q-Z.csv')])
     
-Selected_Funds_data = data[data['fund_symbol'].isin(Selected_Funds['fund_symbol'])]
+Selected_Funds_data = data[data['fund_symbol'].isin(Selected_Funds.index)]
 Selected_Funds_data.loc[:,'price_date'] =  pd.to_datetime(Selected_Funds_data['price_date']).dt.date
 
 #exclude dates where less than 30 funds existed
@@ -78,14 +77,15 @@ for idx_selection, selection_date in enumerate(selection_dates):
     ending_values = Selected_Funds_data.xs(selection_date, level='price_date').loc[selected_funds,:]['nav_per_share']
     #calculate the annualized returns of those funds which were open over the historical review period
     annualized_period_returns = (ending_values/beginning_values)**(1/historical_review_period)-1
+    adj_annualized_period_returns = annualized_period_returns-Selected_Funds[Selected_Funds.index.isin(selected_funds)]['fund_annual_report_net_expense_ratio']
     #sort those annualized returns
-    annualized_period_returns = annualized_period_returns.sort_values(ascending=False)
+    adj_annualized_period_returns = adj_annualized_period_returns.sort_values(ascending=False)
     
     num_funds = len(selected_funds)
     num_funds_per_decile = math.floor(num_funds/10)
     
     deciles = [[]]*10
-    ranked_annualized_period_returns = annualized_period_returns.index.tolist()
+    ranked_annualized_period_returns = adj_annualized_period_returns.index.tolist()
     #break selected funds into deciles based on annualized returns
     for i in range(9):
         deciles[i] = ranked_annualized_period_returns[(i*num_funds_per_decile):((i+1)*num_funds_per_decile)]
