@@ -3,14 +3,14 @@
 #nav doesn't account for any distributions
 
 import pandas as pd
-from pandas import IndexSlice as idx
 import math
 
-historical_review_period = 5 #years
+load_data = True
+historical_review_period = 3 #years
 #frequency at which we try different sortings
 reselection_period = 12 #months
 #how many years into the future do we track the returns of the deciles
-post_selection_timeframe = 10 #years
+post_selection_timeframe = 5 #years
 months_per_year = 12
 
 #Get list of funds
@@ -21,17 +21,19 @@ Funds = Funds[Funds['fund_category'].notna()]
 #convert inception date string to datetime
 Funds['inception_date'] = pd.to_datetime(Funds['inception_date']).dt.date
 
-Selected_Funds = Funds[Funds['fund_category'].str.contains('Small')]
+Selected_Funds = Funds[Funds['fund_category'].str.contains('Growth')]
 selected_funds_categories = Selected_Funds['fund_category'].value_counts()
 selected_funds_categories = selected_funds_categories[selected_funds_categories >= 30]
 
 Selected_Funds = Selected_Funds[Selected_Funds['fund_category'].isin(selected_funds_categories.index.tolist())]
 
-#read data and convert price_date column to datetime data type
-data = pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - A-E.csv')
-data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - F-K.csv')])
-data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - L-P.csv')])
-data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - Q-Z.csv')])
+if load_data:
+    #read data and convert price_date column to datetime data type
+    data = pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - A-E.csv')
+    data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - F-K.csv')])
+    data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - L-P.csv')])
+    data = pd.concat([data,pd.read_csv('D:\Data\ETFs_MutualFunds\MutualFund prices - Q-Z.csv')])
+    
 Selected_Funds_data = data[data['fund_symbol'].isin(Selected_Funds['fund_symbol'])]
 Selected_Funds_data.loc[:,'price_date'] =  pd.to_datetime(Selected_Funds_data['price_date']).dt.date
 
@@ -63,6 +65,8 @@ Selected_Funds_data = Selected_Funds_data.set_index(['fund_symbol','price_date']
 #determine date we sort into deciles
 selection_dates = price_dates[historical_review_period*months_per_year:-post_selection_timeframe*months_per_year:reselection_period]
 
+decile_returns = []
+
 #for each selection date
 for idx_selection, selection_date in enumerate(selection_dates):
     #which funds were open on that date
@@ -92,23 +96,23 @@ for idx_selection, selection_date in enumerate(selection_dates):
     #for each decile find the annualized returns over each time horizon
     for i, decile in enumerate(deciles):
         temp = {}
+        beginning_values = Selected_Funds_data.xs(selection_date, level='price_date').loc[decile,:]['nav_per_share']
         #for each year into the future of our post_selection_timeframe
         for j in range(1,post_selection_timeframe+1):
             year_str = 'Year ' + str(j)
             review_date = price_dates[(historical_review_period+j)*months_per_year+idx_selection*reselection_period]
-            beginning_values = Selected_Funds_data.xs(selection_date, level='price_date').loc[decile,:]['nav_per_share']
             ending_values = Selected_Funds_data.xs(review_date, level='price_date').loc[decile,:]['nav_per_share']
-            decile_annualized_period_returns = (ending_values/beginning_values)**(1/historical_review_period)-1
+            decile_annualized_period_returns = (ending_values/beginning_values)**(1/j)-1
             temp[year_str] = [decile_annualized_period_returns.mean()]
         if i == 0:
             deciles_post_selection_returns = pd.DataFrame(temp, index=[1])
             deciles_post_selection_returns.index.name = 'Decile'
         else:
             deciles_post_selection_returns = pd.concat([deciles_post_selection_returns,pd.DataFrame(temp, index=[i+1])])
-            
-    if idx_selection == 0:
-        average_deciles_post_selection_returns = deciles_post_selection_returns
-    else:
-        average_deciles_post_selection_returns = (average_deciles_post_selection_returns.mul(idx_selection) + deciles_post_selection_returns).div(idx_selection+1)
+    
+    deciles_post_selection_returns.index.names = ['Decile']
+    decile_returns.append(deciles_post_selection_returns)
+     
+average_deciles_post_selection_returns = pd.concat(decile_returns, keys = selection_dates, axis=0)
         
 average_deciles_post_selection_returns.transpose().plot()
